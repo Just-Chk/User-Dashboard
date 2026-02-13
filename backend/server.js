@@ -2,71 +2,85 @@ const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('./config');
 
 const app = express();
 
-// CORS configuration for Netlify
-app.use(cors
-  ({
-    origin: ['http://localhost:5000', 'https://chk-user-dashboard.netlify.app/login'],
-    credentials: true
-}));
+// CORS configuration
+const corsOptions = {
+    origin: ['https://chk-user-dashboard.netlify.app', 'http://localhost:8888', 'http://localhost:5000'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-auth-token'],
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
-// Serve static files (if needed)
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Root route
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'Backend API is running',
+        endpoints: {
+            health: '/health',
+            signup: '/api/signup (POST)',
+            login: '/api/login (POST)',
+            users: '/api/users (GET, POST)',
+            userById: '/api/users/:id (GET, PUT, DELETE)'
+        }
+    });
+});
 
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', message: 'Backend is running' });
+});
+
+// MongoDB connection
 mongoose.connect(config.MONGODB_URI)
   .then(() => console.log('MongoDB Connected'))
   .catch(err => console.log('MongoDB Error:', err));
 
-const UserSchema = new mongoose.Schema
-({
+// User Schema
+const UserSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
   password: String
 });
-
 const User = mongoose.model('User', UserSchema);
 
-const auth = (req, res, next) => 
-{
+// Auth middleware
+const auth = (req, res, next) => {
   const token = req.header('x-auth-token');
   if (!token) return res.status(401).json({ msg: 'No token' });
   
-  try 
-  {
+  try {
     jwt.verify(token, config.JWT_SECRET);
     next();
-  } 
-  
-  catch (err) 
-  {
+  } catch (err) {
     res.status(401).json({ msg: 'Invalid token' });
   }
 };
 
+// ============= API ROUTES =============
+
 // Signup Route
-app.post('/api/signup', async (req, res) => 
-{
-  try 
-  {
+app.post('/api/signup', async (req, res) => {
+  try {
     const { name, email, password } = req.body;
     
     let user = await User.findOne({ email });
-    if (user) 
-    {
+    if (user) {
       return res.status(400).json({ msg: 'User already exists' });
     }
     
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    user = new User
-    ({
+    user = new User({
       name,
       email,
       password: hashedPassword
@@ -74,31 +88,26 @@ app.post('/api/signup', async (req, res) =>
     
     await user.save();
     res.json({ msg: 'User created successfully' });
-  } 
-  
-  catch (err) 
-  {
+  } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-app.post('/api/login', async (req, res) => 
-{
-  const { email, password } = req.body;
-  
-  // Admin login
-  if (email === 'admin@example.com' && password === 'admin123') 
-  {
-    const token = jwt.sign({ user: 'admin', email }, config.JWT_SECRET, { expiresIn: '1h' });
-    return res.json({ token });
-  }
-  
-  try 
-  {
+// Login Route
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Check admin login
+    if (email === 'admin@example.com' && password === 'admin123') {
+      const token = jwt.sign({ user: 'admin', email }, config.JWT_SECRET, { expiresIn: '1h' });
+      return res.json({ token });
+    }
+    
+    // Check regular user login
     const user = await User.findOne({ email });
-    if (!user) 
-    {
+    if (!user) {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
     
@@ -110,81 +119,92 @@ app.post('/api/login', async (req, res) =>
     const token = jwt.sign({ id: user._id, email: user.email }, config.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-// User routes
-app.get('/api/users/:id', auth, async (req, res) => 
-{
-  try 
-  {
-    const user = await User.findById(req.params.id);
-    res.json(user);
-  } 
-  
-  catch (err) 
-  {
-    res.status(500).json({ msg: 'Server error' });
-  }
-});
-
-app.get('/api/users', auth, async (req, res) => 
-{
-  try 
-  {
-    const users = await User.find();
+// Get all users
+app.get('/api/users', auth, async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
     res.json(users);
-  } 
-  
-  catch (err) 
-  {
+  } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
+// Get user by ID
+app.get('/api/users/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// Create user
 app.post('/api/users', auth, async (req, res) => {
   try {
-    if (req.body.password) {
-      const salt = await bcrypt.genSalt(10);
-      req.body.password = await bcrypt.hash(req.body.password, salt);
+    const { name, email, password } = req.body;
+    
+    // Check if user exists
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ msg: 'User already exists' });
     }
-    const user = new User(req.body);
+    
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    user = new User({
+      name,
+      email,
+      password: hashedPassword
+    });
+    
     await user.save();
-    res.json(user);
+    res.json({ msg: 'User created successfully' });
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
+// Update user
 app.put('/api/users/:id', auth, async (req, res) => {
   try {
-    const updateData = { name: req.body.name, email: req.body.email };
-    const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    const { name, email } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.id, 
+      { name, email }, 
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
     res.json(user);
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-app.delete('/api/users/:id', auth, async (req, res) => 
-{
-  try 
-  {
-    await User.findByIdAndDelete(req.params.id);
+// Delete user
+app.delete('/api/users/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
     res.json({ msg: 'User deleted' });
-  } 
-  
-  catch (err) 
-  {
+  } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }
-});
-
-// Health check route
-app.get('/health', (req, res) => 
-{
-  res.json({ status: 'OK' });
 });
 
 const PORT = process.env.PORT || 5000;
