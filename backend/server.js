@@ -16,9 +16,27 @@ const corsOptions = {
     optionsSuccessStatus: 200
 };
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors(corsOptions)); // This handles preflight automatically
 app.use(express.json());
+
+// Root route
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'Backend API is running',
+        endpoints: {
+            health: '/health',
+            signup: '/api/signup (POST)',
+            login: '/api/login (POST)',
+            users: '/api/users (GET, POST)',
+            userById: '/api/users/:id (GET, PUT, DELETE)'
+        }
+    });
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', message: 'Backend is running' });
+});
 
 // Root route
 app.get('/', (req, res) => {
@@ -209,3 +227,4 @@ app.delete('/api/users/:id', auth, async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
