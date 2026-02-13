@@ -14,8 +14,17 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Remove static file serving - this was causing the error
-// app.use(express.static(path.join(__dirname, '../frontend')));
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'Backend API is running',
+        endpoints: {
+            health: '/health',
+            signup: '/api/signup',
+            login: '/api/login',
+            users: '/api/users'
+        }
+    });
+});
 
 mongoose.connect(config.MONGODB_URI)
   .then(() => console.log('MongoDB Connected'))
@@ -154,3 +163,4 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
