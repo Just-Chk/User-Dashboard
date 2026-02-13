@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Users</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h2>User Dashboard</h2>
+            <button id="logoutBtn">Logout</button>
+        </header>
+
+        <div class="search-section">
+            <h3>Search Users</h3>
+            <input type="text" id="searchInput" placeholder="Search by name or email..." class="search-input">
+        </div>
+
+        <div class="add-form">
+            <h3>Add User</h3>
+            <form id="addUserForm">
+                <input type="text" id="name" placeholder="Name" required>
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="password" id="password" placeholder="Password">
+                <button type="submit">Add</button>
+            </form>
+        </div>
+
+        <table id="userTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="userTableBody"></tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="app.js"></script>
+</body>
