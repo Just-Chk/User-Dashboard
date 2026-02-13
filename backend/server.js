@@ -2,15 +2,20 @@ const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('./config');
 
 const app = express();
 
-app.use(cors());
+// CORS configuration for Netlify
+app.use(cors({
+    origin: ['http://localhost:8888', 'https://your-netlify-app.netlify.app'], // Update with your Netlify URL
+    credentials: true
+}));
 app.use(express.json());
-app.use(express.static(__dirname));
+
+// Remove static file serving - this was causing the error
+// app.use(express.static(path.join(__dirname, '../frontend')));
 
 mongoose.connect(config.MONGODB_URI)
   .then(() => console.log('MongoDB Connected'))
@@ -28,7 +33,7 @@ const auth = (req, res, next) => {
   if (!token) return res.status(401).json({ msg: 'No token' });
   
   try {
-    jwt.verify(token, 'secret123');
+    jwt.verify(token, config.JWT_SECRET);
     next();
   } catch (err) {
     res.status(401).json({ msg: 'Invalid token' });
@@ -40,17 +45,14 @@ app.post('/api/signup', async (req, res) => {
   try {
     const { name, email, password } = req.body;
     
-    // Check if user exists
     let user = await User.findOne({ email });
     if (user) {
       return res.status(400).json({ msg: 'User already exists' });
     }
     
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // Create new user
     user = new User({
       name,
       email,
@@ -58,7 +60,6 @@ app.post('/api/signup', async (req, res) => {
     });
     
     await user.save();
-    
     res.json({ msg: 'User created successfully' });
   } catch (err) {
     console.error(err);
@@ -66,17 +67,16 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login Route - Updated with bcrypt
+// Login Route
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   
-  // Check admin login (keep existing admin login)
+  // Admin login
   if (email === 'admin@example.com' && password === 'admin123') {
-    const token = jwt.sign({ user: 'admin', email }, 'secret123', { expiresIn: '1h' });
+    const token = jwt.sign({ user: 'admin', email }, config.JWT_SECRET, { expiresIn: '1h' });
     return res.json({ token });
   }
   
-  // Check regular user login
   try {
     const user = await User.findOne({ email });
     if (!user) {
@@ -88,14 +88,14 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
     
-    const token = jwt.sign({ id: user._id, email: user.email }, 'secret123', { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id, email: user.email }, config.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token });
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-// Add GET /api/users/:id for edit functionality
+// User routes
 app.get('/api/users/:id', auth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -116,7 +116,6 @@ app.get('/api/users', auth, async (req, res) => {
 
 app.post('/api/users', auth, async (req, res) => {
   try {
-    // Hash password before saving new user
     if (req.body.password) {
       const salt = await bcrypt.genSalt(10);
       req.body.password = await bcrypt.hash(req.body.password, salt);
@@ -131,7 +130,6 @@ app.post('/api/users', auth, async (req, res) => {
 
 app.put('/api/users/:id', auth, async (req, res) => {
   try {
-    // Don't update password through this route
     const updateData = { name: req.body.name, email: req.body.email };
     const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(user);
@@ -149,8 +147,10 @@ app.delete('/api/users/:id', auth, async (req, res) => {
   }
 });
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, 'signup.html')));
+// Health check route
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Backend is running' });
+});
 
-app.listen(5000, () => console.log('Server running on http://localhost:5000'));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
