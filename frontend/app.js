@@ -1,14 +1,19 @@
-// Use environment variable or fallback to localhost for development
 const API_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:5000' 
     : 'https://user-dashboard-nyp7.onrender.com';
 
+// Check token and redirect before anything else
 const token = localStorage.getItem('token');
-if (!token) window.location.href = '/login';
+if (!token) {
+    window.location.href = 'login.html';
+} else {
+    // Hide loading and show container
+    document.querySelector('.loading').style.display = 'none';
+    document.querySelector('.container').style.display = 'block';
+}
 
 // Axios interceptor
-axios.interceptors.request.use(config => 
-{
+axios.interceptors.request.use(config => {
     config.headers['x-auth-token'] = token;
     return config;
 });
@@ -16,20 +21,15 @@ axios.interceptors.request.use(config =>
 let allUsers = [];
 
 async function loadUsers() {
-    try 
-    {
+    try {
         const res = await axios.get(`${API_URL}/api/users`);
         allUsers = res.data;
         displayUsers(allUsers);
-    } 
-    
-    catch (err) 
-    {
+    } catch (err) {
         console.error('Error loading users:', err);
-        if (err.response?.status === 401) 
-        {
+        if (err.response?.status === 401) {
             localStorage.removeItem('token');
-            window.location.href = '/login';
+            window.location.href = 'login.html';
         }
     }
 }
@@ -122,3 +122,4 @@ document.getElementById('logoutBtn').onclick = () =>
 };
 
 loadUsers();
+
